@@ -11,12 +11,87 @@ import { RecentWork } from './RecentWork';
 import { PerformanceMetrics } from './PerformanceMetrics';
 import { QuickActions } from './QuickActions';
 import { Notifications } from './Notifications';
+import { useNavigate } from 'react-router-dom';
 
 export function Dashboard() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'transcription'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'transcription' | 'documents' | 'analytics' | 'settings' | 'support'>('calendar');
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'calendar':
+        return (
+          <>
+            <div className="col-span-12 xl:col-span-8">
+              <DepositionCalendar />
+            </div>
+            <div className="col-span-12 xl:col-span-4">
+              <QuickActions />
+            </div>
+          </>
+        );
+      case 'transcription':
+        return (
+          <div className="col-span-12">
+            <TranscriptionTool />
+          </div>
+        );
+      case 'documents':
+        return (
+          <div className="col-span-12">
+            <RecentWork />
+          </div>
+        );
+      case 'analytics':
+        return (
+          <div className="col-span-12">
+            <PerformanceMetrics />
+          </div>
+        );
+      case 'settings':
+        return (
+          <div className="col-span-12">
+            <SecurityPanel />
+          </div>
+        );
+      case 'support':
+        return (
+          <div className="col-span-12 bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Support Center</h2>
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h3 className="font-semibold text-blue-900">Need Help?</h3>
+                <p className="text-blue-700">Our support team is available 24/7 to assist you.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button className="p-4 border rounded-lg hover:bg-gray-50 flex items-center">
+                  <Book className="h-5 w-5 text-blue-600 mr-2" />
+                  Documentation
+                </button>
+                <button className="p-4 border rounded-lg hover:bg-gray-50 flex items-center">
+                  <HelpCircle className="h-5 w-5 text-blue-600 mr-2" />
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -80,12 +155,39 @@ export function Dashboard() {
             active={activeTab === 'transcription'}
             onClick={() => setActiveTab('transcription')}
           />
-          <SidebarLink icon={FileText} text="Documents" />
-          <SidebarLink icon={BarChart2} text="Analytics" />
-          <SidebarLink icon={Upload} text="Uploads" />
-          <SidebarLink icon={Book} text="Resources" />
-          <SidebarLink icon={Settings} text="Settings" />
-          <SidebarLink icon={HelpCircle} text="Support" />
+          <SidebarLink 
+            icon={FileText} 
+            text="Documents" 
+            active={activeTab === 'documents'}
+            onClick={() => setActiveTab('documents')}
+          />
+          <SidebarLink 
+            icon={BarChart2} 
+            text="Analytics" 
+            active={activeTab === 'analytics'}
+            onClick={() => setActiveTab('analytics')}
+          />
+          <SidebarLink 
+            icon={Settings} 
+            text="Settings" 
+            active={activeTab === 'settings'}
+            onClick={() => setActiveTab('settings')}
+          />
+          <SidebarLink 
+            icon={HelpCircle} 
+            text="Support" 
+            active={activeTab === 'support'}
+            onClick={() => setActiveTab('support')}
+          />
+          <div className="pt-4 mt-4 border-t border-gray-700">
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center px-2 py-2 text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white rounded-md"
+            >
+              <LogOut className="mr-3 h-6 w-6" />
+              Sign Out
+            </button>
+          </div>
         </nav>
       </aside>
 
@@ -93,32 +195,7 @@ export function Dashboard() {
       <main className={`pt-16 ${sidebarOpen ? 'ml-64' : ''} transition-margin duration-200 ease-in-out`}>
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-12 gap-6">
-            {activeTab === 'calendar' ? (
-              <>
-                {/* Calendar View */}
-                <div className="col-span-12 xl:col-span-8">
-                  <DepositionCalendar />
-                </div>
-                <div className="col-span-12 xl:col-span-4">
-                  <QuickActions />
-                </div>
-              </>
-            ) : (
-              // Transcription View
-              <div className="col-span-12">
-                <TranscriptionTool />
-              </div>
-            )}
-
-            {/* Performance Metrics */}
-            <div className="col-span-12 lg:col-span-4">
-              <PerformanceMetrics />
-            </div>
-
-            {/* Recent Work */}
-            <div className="col-span-12 lg:col-span-8">
-              <RecentWork />
-            </div>
+            {renderContent()}
           </div>
         </div>
       </main>
@@ -128,13 +205,9 @@ export function Dashboard() {
 
 function SidebarLink({ icon: Icon, text, active = false, onClick }) {
   return (
-    <a
-      href="#"
-      onClick={(e) => {
-        e.preventDefault();
-        onClick?.();
-      }}
-      className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+    <button
+      onClick={onClick}
+      className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
         active
           ? 'bg-gray-900 text-white'
           : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -142,6 +215,6 @@ function SidebarLink({ icon: Icon, text, active = false, onClick }) {
     >
       <Icon className="mr-3 h-6 w-6" />
       {text}
-    </a>
+    </button>
   );
 }
