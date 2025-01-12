@@ -1,24 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
-  Calendar, 
-  Clock, 
-  Bell, 
-  Mic, 
-  FileText, 
-  BarChart2, 
-  Settings,
-  Upload,
-  HelpCircle,
-  Book,
-  Menu,
-  Wifi,
-  User,
-  LogOut
+  Calendar, Clock, Bell, Mic, FileText, BarChart2, Settings,
+  Upload, HelpCircle, Book, Menu, Wifi, User, LogOut
 } from 'lucide-react';
 import { DepositionCalendar } from './DepositionCalendar';
-import { TranscriptionWorkspace } from './TranscriptionWorkspace';
-import { AudioEnhancement } from './AudioEnhancement';
+import { TranscriptionTool } from '../transcription/TranscriptionTool';
 import { SecurityPanel } from './SecurityPanel';
 import { RecentWork } from './RecentWork';
 import { PerformanceMetrics } from './PerformanceMetrics';
@@ -29,7 +16,7 @@ export function Dashboard() {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showAudioSettings, setShowAudioSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState<'calendar' | 'transcription'>('calendar');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -81,13 +68,23 @@ export function Dashboard() {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 bg-gray-800 w-64 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-200 ease-in-out z-20`}>
         <nav className="mt-16 px-2 space-y-1">
-          <SidebarLink icon={Calendar} text="Calendar" active />
-          <SidebarLink icon={Mic} text="Transcription" />
+          <SidebarLink 
+            icon={Calendar} 
+            text="Calendar" 
+            active={activeTab === 'calendar'} 
+            onClick={() => setActiveTab('calendar')}
+          />
+          <SidebarLink 
+            icon={Mic} 
+            text="Transcription" 
+            active={activeTab === 'transcription'}
+            onClick={() => setActiveTab('transcription')}
+          />
           <SidebarLink icon={FileText} text="Documents" />
           <SidebarLink icon={BarChart2} text="Analytics" />
           <SidebarLink icon={Upload} text="Uploads" />
           <SidebarLink icon={Book} text="Resources" />
-          <SidebarLink icon={Settings} text="Settings" onClick={() => setShowAudioSettings(!showAudioSettings)} />
+          <SidebarLink icon={Settings} text="Settings" />
           <SidebarLink icon={HelpCircle} text="Support" />
         </nav>
       </aside>
@@ -96,43 +93,31 @@ export function Dashboard() {
       <main className={`pt-16 ${sidebarOpen ? 'ml-64' : ''} transition-margin duration-200 ease-in-out`}>
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-12 gap-6">
-            {/* Deposition Calendar */}
-            <div className="col-span-12 xl:col-span-8">
-              <DepositionCalendar />
-            </div>
-
-            {/* Quick Actions */}
-            <div className="col-span-12 xl:col-span-4">
-              <QuickActions />
-            </div>
-
-            {/* Active Transcription */}
-            <div className="col-span-12">
-              <TranscriptionWorkspace />
-            </div>
-
-            {/* Audio Enhancement Settings */}
-            {showAudioSettings && (
-              <div className="col-span-12 lg:col-span-6">
-                <AudioEnhancement />
+            {activeTab === 'calendar' ? (
+              <>
+                {/* Calendar View */}
+                <div className="col-span-12 xl:col-span-8">
+                  <DepositionCalendar />
+                </div>
+                <div className="col-span-12 xl:col-span-4">
+                  <QuickActions />
+                </div>
+              </>
+            ) : (
+              // Transcription View
+              <div className="col-span-12">
+                <TranscriptionTool />
               </div>
             )}
-
-            {/* Security Panel */}
-            {showAudioSettings && (
-              <div className="col-span-12 lg:col-span-6">
-                <SecurityPanel />
-              </div>
-            )}
-
-            {/* Recent Work */}
-            <div className="col-span-12 lg:col-span-8">
-              <RecentWork />
-            </div>
 
             {/* Performance Metrics */}
             <div className="col-span-12 lg:col-span-4">
               <PerformanceMetrics />
+            </div>
+
+            {/* Recent Work */}
+            <div className="col-span-12 lg:col-span-8">
+              <RecentWork />
             </div>
           </div>
         </div>
