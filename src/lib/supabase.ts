@@ -13,11 +13,6 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true
-    },
-    global: {
-      headers: {
-        'x-application-name': 'LegalDepo Pro'
-      }
     }
   }
 );
