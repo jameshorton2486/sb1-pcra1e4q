@@ -1,222 +1,299 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Settings, FileAudio, Users, Gavel, CheckCircle, X } from 'lucide-react';
+import { 
+  Upload, Settings, FileAudio, Users, Wand2, 
+  Save, Download, AlertCircle, CheckCircle, 
+  Play, Pause, Volume2, VolumeX, Clock
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { transcribeAudio, type TranscriptionResult } from '../../lib/deepgram';
-import { TranscriptEditor } from './TranscriptEditor';
-import { exportTranscript } from '../../lib/export';
+import { transcribeAudio } from '../../lib/deepgram';
+import { LoadingSpinner } from '../common/LoadingSpinner';
+import { PageHeader } from '../common/PageHeader';
+import { EmptyState } from '../common/EmptyState';
 
-// ... (previous interfaces remain the same)
+interface TranscriptionSettings {
+  diarization: boolean;
+  smartFormat: boolean;
+  utterances: boolean;
+  punctuation: boolean;
+  profanityFilter: boolean;
+  languageDetection: boolean;
+  keywords: string[];
+}
+
+interface TranscriptionResult {
+  text: string;
+  confidence: number;
+  words: Array<{
+    word: string;
+    start: number;
+    end: number;
+    confidence: number;
+    speaker?: number;
+  }>;
+  speakers?: Array<{
+    id: number;
+    name?: string;
+  }>;
+}
 
 export function TranscriptionTool() {
   const { user } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>('');
-  const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
-  const [caseDetails, setCaseDetails] = useState<CaseDetails>({
-    styling: '',
-    causeNumber: '',
-    courtInfo: '',
-    proceedingDate: '',
-    proceedingType: 'deposition'
-  });
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [result, setResult] = useState<TranscriptionResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<TranscriptionSettings>({
-    utterances: true,
-    smartFormat: true,
     diarization: true,
+    smartFormat: true,
+    utterances: true,
     punctuation: true,
+    profanityFilter: false,
+    languageDetection: true,
     keywords: []
   });
-  const [outputPrefs, setOutputPrefs] = useState<OutputPreferences>({
-    format: 'docx',
-    speakerLabels: true,
-    customHeader: '',
-    customFooter: ''
-  });
-  const [processing, setProcessing] = useState(false);
-  const [step, setStep] = useState<'upload' | 'details' | 'transcribe' | 'edit'>('upload');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) {
       // Validate file type
-      const validTypes = ['.mp3', '.wav', '.mp4', '.flac'];
-      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-      if (!validTypes.includes(fileExtension)) {
-        alert('Please select a valid audio/video file (MP3, WAV, MP4, or FLAC)');
+      const validTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/x-m4a'];
+      if (!validTypes.includes(selectedFile.type)) {
+        setError('Please select a valid audio file (MP3, WAV, M4A, or MP4)');
         return;
       }
-      setSelectedFile(file);
-      setAudioUrl(URL.createObjectURL(file));
-      setStep('details');
+
+      // Validate file size (max 500MB)
+      if (selectedFile.size > 500 * 1024 * 1024) {
+        setError('File size must be less than 500MB');
+        return;
+      }
+
+      setFile(selectedFile);
+      setAudioUrl(URL.createObjectURL(selectedFile));
+      setError(null);
     }
-  };
-
-  const handleParticipantAdd = () => {
-    setParticipants([...participants, {
-      name: '',
-      role: 'other'
-    }]);
-  };
-
-  const handleParticipantRemove = (index: number) => {
-    setParticipants(participants.filter((_, i) => i !== index));
   };
 
   const handleTranscribe = async () => {
-    if (!selectedFile) {
-      alert('Please select a file to transcribe');
+    if (!file) {
+      setError('Please select a file to transcribe');
       return;
     }
 
-    setProcessing(true);
+    setIsProcessing(true);
+    setError(null);
+
     try {
-      // Extract keywords from case details and participants
-      const keywords = [
-        caseDetails.styling,
-        ...participants.map(p => p.name),
-        ...participants.map(p => p.firm || '').filter(Boolean)
-      ];
-
-      // Start transcription
-      const result = await transcribeAudio(selectedFile, {
-        ...settings,
-        keywords: [...settings.keywords, ...keywords]
-      });
-
-      setTranscriptionResult(result);
-      setStep('edit');
-    } catch (error) {
-      console.error('Transcription error:', error);
-      alert('An error occurred during transcription');
+      const result = await transcribeAudio(file, settings);
+      setResult(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred during transcription');
     } finally {
-      setProcessing(false);
+      setIsProcessing(false);
     }
   };
 
-  const handleSaveTranscript = async (words: TranscriptionResult['words']) => {
-    if (!transcriptionResult) return;
-
-    try {
-      await exportTranscript(
-        words,
-        transcriptionResult.speakers || [],
-        caseDetails,
-        outputPrefs
-      );
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('An error occurred while saving the transcript');
-    }
+  const handleSettingChange = (setting: keyof TranscriptionSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting]
+    }));
   };
 
-  // Render different steps based on current state
-  const renderStep = () => {
-    switch (step) {
-      case 'upload':
-        return (
-          <section className="mb-8">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+  const handleDownload = (format: 'txt' | 'docx' | 'json') => {
+    if (!result) return;
+
+    // Implementation for download functionality
+    // This would be handled by your export utility
+  };
+
+  if (!['court_reporter', 'scopist'].includes(user?.role || '')) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={AlertCircle}
+          title="Access Restricted"
+          description="This tool is only available to Court Reporters and Scopists."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <PageHeader
+        title="Audio Transcription"
+        description="Convert audio recordings to accurate legal transcripts"
+        icon={FileAudio}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* File Upload and Settings */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* File Upload */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="text-center">
               <input
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileSelect}
-                accept=".mp3,.wav,.mp4,.flac"
+                accept=".mp3,.wav,.m4a,.mp4"
                 className="hidden"
               />
-              <div>
-                <FileAudio className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Audio File</h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  We accept over 40 common audio file formats including MP3, WAV, FLAC, M4A, and more.
-                </p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-                >
-                  <Upload className="h-5 w-5 mr-2" />
-                  Select File
-                </button>
+              <div className="mb-4">
+                <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-blue-600" />
+                </div>
               </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Upload Audio File
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Drag and drop or click to select an audio file
+              </p>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Select File
+              </button>
+              {file && (
+                <div className="mt-4 text-sm text-gray-600">
+                  Selected: {file.name}
+                </div>
+              )}
             </div>
-          </section>
-        );
+          </div>
 
-      case 'details':
-        return (
-          <>
-            {/* Previous case details and participants sections remain the same */}
-            {/* Add navigation buttons */}
-            <div className="flex justify-between mt-6">
-              <button
-                onClick={() => setStep('upload')}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => setStep('transcribe')}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Next
-              </button>
+          {/* Transcription Settings */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Transcription Settings
+            </h3>
+            <div className="space-y-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.diarization}
+                  onChange={() => handleSettingChange('diarization')}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Speaker Diarization</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.smartFormat}
+                  onChange={() => handleSettingChange('smartFormat')}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Smart Formatting</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.utterances}
+                  onChange={() => handleSettingChange('utterances')}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Utterance Detection</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.punctuation}
+                  onChange={() => handleSettingChange('punctuation')}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Automatic Punctuation</span>
+              </label>
             </div>
-          </>
-        );
+          </div>
+        </div>
 
-      case 'transcribe':
-        return (
-          <>
-            {/* Previous transcription settings and output preferences sections */}
-            <div className="flex justify-between mt-6">
-              <button
-                onClick={() => setStep('details')}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleTranscribe}
-                disabled={processing}
-                className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {processing ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </>
-                ) : (
-                  'Start Transcription'
-                )}
-              </button>
-            </div>
-          </>
-        );
+        {/* Transcription Area */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            {error ? (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <div className="flex">
+                  <AlertCircle className="h-5 w-5 text-red-400" />
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">Error</h3>
+                    <div className="mt-2 text-sm text-red-700">{error}</div>
+                  </div>
+                </div>
+              </div>
+            ) : isProcessing ? (
+              <div className="text-center py-12">
+                <LoadingSpinner size="lg" />
+                <p className="mt-4 text-sm text-gray-600">Processing audio file...</p>
+              </div>
+            ) : result ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <span className="text-sm text-gray-600">
+                      Transcription complete ({Math.round(result.confidence * 100)}% confidence)
+                    </span>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleDownload('txt')}
+                      className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      TXT
+                    </button>
+                    <button
+                      onClick={() => handleDownload('docx')}
+                      className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      DOCX
+                    </button>
+                  </div>
+                </div>
 
-      case 'edit':
-        return transcriptionResult && (
-          <TranscriptEditor
-            words={transcriptionResult.words}
-            speakers={transcriptionResult.speakers || []}
-            audioUrl={audioUrl}
-            onSave={handleSaveTranscript}
-          />
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Transcription Tool</h2>
-        {renderStep()}
+                <div className="border rounded-lg p-4 max-h-[600px] overflow-y-auto">
+                  {result.words.map((word, index) => (
+                    <span
+                      key={index}
+                      className={`inline-block ${
+                        word.confidence < 0.8 ? 'bg-yellow-100' : ''
+                      }`}
+                      title={`Confidence: ${Math.round(word.confidence * 100)}%`}
+                    >
+                      {word.word}{' '}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <EmptyState
+                  icon={FileAudio}
+                  title="No Transcription Yet"
+                  description="Upload an audio file and click 'Start Transcription' to begin"
+                  action={
+                    <button
+                      onClick={handleTranscribe}
+                      disabled={!file}
+                      className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Wand2 className="h-5 w-5 mr-2" />
+                      Start Transcription
+                    </button>
+                  }
+                />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

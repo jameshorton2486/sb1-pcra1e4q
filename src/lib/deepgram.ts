@@ -9,15 +9,17 @@ if (!DEEPGRAM_API_KEY) {
 const deepgram = new Deepgram(DEEPGRAM_API_KEY);
 
 export interface TranscriptionOptions {
-  utterances?: boolean;
-  smartFormat?: boolean;
   diarization?: boolean;
+  smartFormat?: boolean;
+  utterances?: boolean;
   punctuation?: boolean;
+  profanityFilter?: boolean;
+  languageDetection?: boolean;
   keywords?: string[];
 }
 
 export interface TranscriptionResult {
-  transcript: string;
+  text: string;
   confidence: number;
   words: Array<{
     word: string;
@@ -50,11 +52,13 @@ export async function transcribeAudio(
       diarize: options.diarization,
       utterances: options.utterances,
       punctuate: options.punctuation,
+      profanity_filter: options.profanityFilter,
+      detect_language: options.languageDetection,
       keywords: options.keywords,
     });
 
     return {
-      transcript: response.results.channels[0].alternatives[0].transcript,
+      text: response.results.channels[0].alternatives[0].transcript,
       confidence: response.results.channels[0].alternatives[0].confidence,
       words: response.results.channels[0].alternatives[0].words,
       speakers: response.results.channels[0].alternatives[0].speaker_labels,
